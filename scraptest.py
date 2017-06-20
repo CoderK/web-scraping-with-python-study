@@ -1,22 +1,24 @@
 from urllib.request import urlopen
-from urllib.request import HTTPError
 from bs4 import BeautifulSoup
+import re
 
+html = urlopen("http://www.pythonscraping.com/pages/page3.html")
+bsObj = BeautifulSoup(html, "html.parser")
 
-def get_title(url):
-    try:
-        html = urlopen(url)
-    except HTTPError:
-        return None
-    try:
-        bs_obj = BeautifulSoup(html.read(), "html.parser")
-        return bs_obj.body.h1
-    except AttributeError:
-        return None
+print("### siblings")
+for sibling in bsObj.find("table", {"id": "giftList"}).tr.next_siblings:
+    print(sibling)
 
-title = get_title("http://www.pythonscraping.com/pages/page1.html")
+images = bsObj.findAll("img", {"src": re.compile("\.\.\/img\/gifts/img.*\.jpg")})
 
-if title is None:
-    print("Title could not be found")
-else:
-    print(title)
+print("")
+print("### images")
+for image in images:
+    print(image["src"])
+
+print("")
+print("### tags with two attributes")
+tagsWithTwoAttrs = bsObj.findAll(lambda tag: len(tag.attrs) == 2)
+for tag in tagsWithTwoAttrs:
+    print(tag)
+
