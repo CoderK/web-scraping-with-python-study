@@ -1,55 +1,53 @@
-
 from urllib.request import urlopen
-from urllib.parse import urlparse
 from bs4 import BeautifulSoup
-import re
-import urllib
+
 import datetime
 import random
+import re
 import ssl
+import json
+import urllib
 
-pages = set()
-gcontext = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
 random.seed(datetime.datetime.now())
+gcontext = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
 
-def getInternalLinks(bsObj, includeUrl):
-    includeUrl = urlparse(includeUrl).scheme + "://" + urlparse(includeUrl).netloc
-    internalLinks = []
-    for link in bsObj.findAll("a", href=re.compile("^(/|.*" + includeUrl + ")")):
-        if link.attrs['href'] is not None:
-            if link.attrs['href'] not in internalLinks:
-                if link.attrs['href'].startswith("/"):
-                    internalLinks.append(includeUrl + link.attrs['href'])
-                else:
-                    internalLinks.append(link.attrs['href'])
-    return internalLinks
-
-def getExternalLinks(bsObj, excludeUrl):
-    externalLinks = []
-    for link in bsObj.findAll("a", href=re.compile("^(http|www)((?!" + excludeUrl + ").)*$")):
-        if link.attrs['href'] is not None:
-            if link.attrs['href'] not in externalLinks:
-                externalLinks.append(link.attrs['href'])
-    return externalLinks
-
-def getRandomExternalLink(startingPage):
-    html = urlopen(startingPage, context=gcontext)
+def getLinks(articleUrl):
+    html = urlopen("http://en.wikipedia.org" + articleUrl, context=gcontext)
     bsObj = BeautifulSoup(html, "html.parser")
-    externalLinks = getExternalLinks(bsObj, urlparse(startingPage).netloc)
+    return bsObj.find("div", {"id":"bodyContent"}).findAll("a", href=re.compile("^(/wiki/)((?!:).)*$"))
 
-    if len(externalLinks) == 0:
-        domain = urlparse(startingPage).shceme + "//" + urlparse(startingPage).netloc
-        internalLinks = getInternalLinks(bsObj, domain)
-        return getRandomExternalLink(internalLinks[random.randint(0, len(internalLinks) - 1)])
-    else:
-        return externalLinks[random.randint(0, len(externalLinks) - 1)]
+def getHistoryIPs(pageUrl):
+    pageUrl = pageUrl.replace("/wiki/", "")
+    historyUrl = "http://en.wikipedia.org/w/index.php?title="
+    historyUrl += pageUrl + "&action=history"
+    print("history url is: " + historyUrl)
+    html = urlopen(historyUrl, context=gcontext)
+    bsObj = BeautifulSoup(html, "html.parser")
+    ipAddresses = bsObj.findAll("a", {"class":"mw-anonuserlink"})
+    addressList = set()
 
-def followExternalOnly(startingSite):
-    externalLink = getRandomExternalLink(startingSite)
-    print("Random external link is: " + externalLink)
-    followExternalOnly(externalLink)
+    for ipAddress in ipAddresses:
+        addressList.add(ipAddress.get_text())
 
-followExternalOnly("http://oreilly.com")
+    return addressList
 
+def getCountry(ipAddress):
+    try:
+        response = urlopen("http://geoip.nekudo.com/api/" + ipAddress + "/ko").read().decode("utf-8")
+    except urllib.HTTPError:
+        return None
+    responseJson = json.loads(response)
+    return responseJson.get("country").get("code")
 
+links = getLinks("/wiki/Python_(programming_language)")
 
+while(len(links) > 0):
+    for link in links:
+        print("-------------")
+        historyIPs = getHistoryIPs(link.attrs["href"])
+        for historyIP in historyIPs:
+            country = getCountry(historyIP)
+            if country is not None:
+                print(historyIP + " is from " + country)
+    newLink = links[random.randint(0, len(links)-1)].attrs["href"]
+    links = getLinks(newLink)
